@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "customizableplayerspawn:block/player_spawn_marker"
+    }
+  }
+}

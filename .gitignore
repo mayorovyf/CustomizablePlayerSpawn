@@ -1,0 +1,52 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/**/build/
+
+# IDE
+.idea/
+.run/
+out/
+*.iml
+*.ipr
+*.iws
+!**/src/**/out/
+
+# Eclipse
+.apt_generated
+.classpath
+.project
+.settings/
+.factorypath
+.springBeans
+.sts4-cache
+.eclipse/
+bin/
+!**/src/**/bin/
+
+# VS Code
+.vscode/
+
+# Minecraft dev runtime
+run/
+logs/
+crash-reports/
+hs_err_pid*
+replay_pid*
+
+# Generated caches
+**/src/generated/**/.cache/
+
+# Local artifacts
+repo/
+!**/src/**/repo/
+examplemod-template-*.zip
+*.log
+*.tmp
+*.orig
+*.rej
+
+# OS files
+.DS_Store
+Thumbs.db
