@@ -2,7 +2,11 @@ package com.mayo.customizableplayerspawn;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -36,6 +40,16 @@ public final class Config {
                     "Examples: minecraft:end_city/ship, someothermod:start_house"
             )
             .define("structureTemplate", "minecraft:end_city/ship");
+
+    public static final ModConfigSpec.ConfigValue<String> EXTERNAL_STRUCTURE_FILE = BUILDER
+            .comment(
+                    "Optional external .nbt file relative to config/" + CustomizablePlayerSpawnMod.MODID + "/structures.",
+                    "Intended for modpacks that ship a loose structure file without rebuilding any jar.",
+                    "When set, this file is loaded before structureTemplate and is available for every newly created world.",
+                    "Examples: spawn.nbt, pack/start_house.nbt",
+                    "Leave empty to use structureTemplate."
+            )
+            .define("externalStructureFile", "", Config::validateOptionalExternalStructureFile);
 
     public static final ModConfigSpec.ConfigValue<String> SPAWN_MARKER_BLOCK = BUILDER
             .comment(
@@ -109,6 +123,22 @@ public final class Config {
         return parseResourceLocation(STRUCTURE_TEMPLATE.get(), ResourceLocation.fromNamespaceAndPath(CustomizablePlayerSpawnMod.MODID, "start_spawn"));
     }
 
+    public static boolean hasExternalStructureFile() {
+        return !EXTERNAL_STRUCTURE_FILE.get().trim().isEmpty();
+    }
+
+    public static String externalStructureFileName() {
+        return EXTERNAL_STRUCTURE_FILE.get().trim();
+    }
+
+    public static Path externalStructureBaseDirectory() {
+        return Paths.get("config", CustomizablePlayerSpawnMod.MODID, "structures");
+    }
+
+    public static Optional<Path> externalStructureTemplatePath() {
+        return resolveExternalStructurePath(EXTERNAL_STRUCTURE_FILE.get());
+    }
+
     public static String spawnMarkerBlockName() {
         return SPAWN_MARKER_BLOCK.get().trim();
     }
@@ -141,8 +171,39 @@ public final class Config {
         return parsed != null ? parsed : fallback;
     }
 
+    private static Optional<Path> resolveExternalStructurePath(String value) {
+        String normalizedFileName = normalizeExternalStructureFileName(value);
+        if (normalizedFileName.isEmpty()) {
+            return Optional.empty();
+        }
+
+        try {
+            Path relativePath = Paths.get(normalizedFileName).normalize();
+            if (relativePath.isAbsolute() || relativePath.startsWith("..")) {
+                return Optional.empty();
+            }
+
+            return Optional.of(externalStructureBaseDirectory().resolve(relativePath).normalize());
+        } catch (InvalidPathException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private static String normalizeExternalStructureFileName(String value) {
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+
+        return trimmed.endsWith(".nbt") ? trimmed : trimmed + ".nbt";
+    }
+
     private static boolean validateResourceLocation(Object value) {
         return value instanceof String string && ResourceLocation.tryParse(string) != null;
+    }
+
+    private static boolean validateOptionalExternalStructureFile(Object value) {
+        return value instanceof String string && resolveExternalStructurePath(string).isPresent() == !string.isBlank();
     }
 
     private static boolean validateOptionalResourceLocation(Object value) {

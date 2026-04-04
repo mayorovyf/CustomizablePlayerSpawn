@@ -1,13 +1,18 @@
 package com.mayo.customizableplayerspawn;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -101,21 +106,18 @@ public class SpawnStructureManager {
             return Optional.empty();
         }
 
-        ResourceLocation templateId = Config.structureTemplateId();
-        Optional<StructureTemplate> optionalTemplate = server.getStructureManager().get(templateId);
-        if (optionalTemplate.isEmpty()) {
-            CustomizablePlayerSpawnMod.LOGGER.error(
-                    "Structure template {} was not found. Put the .nbt into generated/<namespace>/structures or data/<namespace>/structure.",
-                    templateId
-            );
+        Optional<LoadedStructureTemplate> loadedTemplate = resolveConfiguredStructureTemplate(server);
+        if (loadedTemplate.isEmpty()) {
             return Optional.empty();
         }
 
-        StructureTemplate template = optionalTemplate.get();
+        LoadedStructureTemplate configuredTemplate = loadedTemplate.get();
+        String templateDescription = configuredTemplate.description();
+        StructureTemplate template = configuredTemplate.template();
         StructurePlaceSettings settings = createPlacementSettings();
         Optional<ConfiguredMarkerBlock> markerBlock = resolveConfiguredMarkerBlock();
         if (!hasSpawnAnchor(template, settings, markerBlock)) {
-            logMissingSpawnAnchor(templateId, markerBlock);
+            logMissingSpawnAnchor(templateDescription, markerBlock);
             return Optional.empty();
         }
 
@@ -123,7 +125,7 @@ public class SpawnStructureManager {
         if (origin.isEmpty()) {
             CustomizablePlayerSpawnMod.LOGGER.error(
                     "Unable to find a valid position for {} in dimension {} after {} attempts.",
-                    templateId,
+                    templateDescription,
                     targetLevel.dimension().location(),
                     Config.SEARCH_ATTEMPTS.get()
             );
@@ -135,7 +137,7 @@ public class SpawnStructureManager {
 
         boolean placed = template.placeInWorld(targetLevel, structureOrigin, structureOrigin, settings, targetLevel.getRandom(), Block.UPDATE_ALL);
         if (!placed) {
-            CustomizablePlayerSpawnMod.LOGGER.error("Failed to place start structure {} at {}.", templateId, structureOrigin);
+            CustomizablePlayerSpawnMod.LOGGER.error("Failed to place start structure {} at {}.", templateDescription, structureOrigin);
             return Optional.empty();
         }
 
@@ -143,7 +145,7 @@ public class SpawnStructureManager {
 
         Optional<BlockPos> markerPos = resolvePlacedSpawnMarker(targetLevel, template, structureOrigin, settings, markerBlock);
         if (markerPos.isEmpty()) {
-            logMissingSpawnAnchor(templateId, markerBlock);
+            logMissingSpawnAnchor(templateDescription, markerBlock);
             return Optional.empty();
         }
 
@@ -159,13 +161,77 @@ public class SpawnStructureManager {
 
         CustomizablePlayerSpawnMod.LOGGER.info(
                 "Created start structure {} in {} at origin {} with spawn {}.",
-                templateId,
+                templateDescription,
                 targetLevel.dimension().location(),
                 structureOrigin,
                 spawnPos
         );
 
         return data.resolve(server);
+    }
+
+    private static Optional<LoadedStructureTemplate> resolveConfiguredStructureTemplate(MinecraftServer server) {
+        if (Config.hasExternalStructureFile()) {
+            Optional<Path> externalPath = Config.externalStructureTemplatePath();
+            if (externalPath.isEmpty()) {
+                CustomizablePlayerSpawnMod.LOGGER.error(
+                        "Configured externalStructureFile {} is not a valid relative .nbt path inside {}.",
+                        Config.externalStructureFileName(),
+                        Config.externalStructureBaseDirectory()
+                );
+                return Optional.empty();
+            }
+
+            return loadExternalStructureTemplate(server, externalPath.get());
+        }
+
+        ResourceLocation templateId = Config.structureTemplateId();
+        Optional<StructureTemplate> optionalTemplate = server.getStructureManager().get(templateId);
+        if (optionalTemplate.isEmpty()) {
+            CustomizablePlayerSpawnMod.LOGGER.error(
+                    "Structure template {} was not found. Put the .nbt into generated/<namespace>/structures, data/<namespace>/structure, or config/{}/structures.",
+                    templateId,
+                    CustomizablePlayerSpawnMod.MODID
+            );
+            return Optional.empty();
+        }
+
+        return Optional.of(new LoadedStructureTemplate(templateId.toString(), optionalTemplate.get()));
+    }
+
+    private static Optional<LoadedStructureTemplate> loadExternalStructureTemplate(MinecraftServer server, Path configuredPath) {
+        Path absoluteConfiguredPath = configuredPath.toAbsolutePath().normalize();
+        Path absoluteBaseDirectory = Config.externalStructureBaseDirectory().toAbsolutePath().normalize();
+        if (!absoluteConfiguredPath.startsWith(absoluteBaseDirectory)) {
+            CustomizablePlayerSpawnMod.LOGGER.error(
+                    "Configured external structure path {} escapes the allowed directory {}.",
+                    absoluteConfiguredPath,
+                    absoluteBaseDirectory
+            );
+            return Optional.empty();
+        }
+
+        if (!Files.isRegularFile(absoluteConfiguredPath)) {
+            CustomizablePlayerSpawnMod.LOGGER.error(
+                    "Configured external structure file {} was not found.",
+                    absoluteConfiguredPath
+            );
+            return Optional.empty();
+        }
+
+        try {
+            StructureTemplate template = server.getStructureManager().readStructure(
+                    NbtIo.readCompressed(absoluteConfiguredPath, NbtAccounter.unlimitedHeap())
+            );
+            return Optional.of(new LoadedStructureTemplate(absoluteConfiguredPath.toString(), template));
+        } catch (IOException exception) {
+            CustomizablePlayerSpawnMod.LOGGER.error(
+                    "Couldn't load external structure file {}.",
+                    absoluteConfiguredPath,
+                    exception
+            );
+            return Optional.empty();
+        }
     }
 
     private static StructurePlaceSettings createPlacementSettings() {
@@ -286,13 +352,13 @@ public class SpawnStructureManager {
         return Optional.of(new ConfiguredMarkerBlock(markerBlockId, block.get()));
     }
 
-    private static void logMissingSpawnAnchor(ResourceLocation templateId, Optional<ConfiguredMarkerBlock> markerBlock) {
+    private static void logMissingSpawnAnchor(String templateDescription, Optional<ConfiguredMarkerBlock> markerBlock) {
         String markerBlockDescription = markerBlock.map(configuredMarkerBlock -> configuredMarkerBlock.id().toString()).orElse("<disabled>");
         String dataMarkerName = Config.dataMarkerName();
         if (dataMarkerName.isEmpty()) {
             CustomizablePlayerSpawnMod.LOGGER.error(
                     "Structure template {} has no configured marker block {} and dataMarker is empty.",
-                    templateId,
+                    templateDescription,
                     markerBlockDescription
             );
             return;
@@ -300,7 +366,7 @@ public class SpawnStructureManager {
 
         CustomizablePlayerSpawnMod.LOGGER.error(
                 "Structure template {} has no configured marker block {} and no DATA structure block with metadata {}.",
-                templateId,
+                templateDescription,
                 markerBlockDescription,
                 dataMarkerName
         );
@@ -390,6 +456,9 @@ public class SpawnStructureManager {
         CompoundTag persisted = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
         player.getPersistentData().put(Player.PERSISTED_NBT_TAG, persisted);
         return persisted;
+    }
+
+    private record LoadedStructureTemplate(String description, StructureTemplate template) {
     }
 
     private record ConfiguredMarkerBlock(ResourceLocation id, Block block) {
