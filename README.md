@@ -12,6 +12,8 @@
 
 Теперь задайте точку спавна. Самый простой вариант это поставить внутри структуры блок и указать его id в `spawnMarkerBlock`. Если вы не хотите использовать блок, можно оставить внутри шаблона `structure_block` с режимом `DATA` и задать имя маркера через `dataMarker`. Если блок нужен только как отметка, мод может удалить его после размещения.
 
+Параметр `placementY` теперь считается как смещение от поверхности найденной точки. `0` ставит структуру на поверхность, положительные значения поднимают ее выше, отрицательные опускают ниже.
+
 Когда игрок впервые зайдет в мир, мод найдет подходящее место, поставит структуру и перенесет его в сохраненную точку. Для dev-запуска сейчас по умолчанию включен тестовый вариант с кораблем Края и спавном рядом с рамкой, где лежат элитры.
 
 ## Примеры
@@ -28,7 +30,7 @@ removeSpawnMarkerBlock = true
 dataMarker = ""
 searchRadius = 2048
 searchAttempts = 128
-placementY = -1
+placementY = 0
 surfaceYOffset = 0
 spawnOffsetX = 0
 spawnOffsetY = 0
@@ -48,7 +50,7 @@ removeSpawnMarkerBlock = false
 dataMarker = ""
 searchRadius = 0
 searchAttempts = 1
-placementY = 100
+placementY = 0
 surfaceYOffset = 0
 spawnOffsetX = 0
 spawnOffsetY = 0
@@ -68,7 +70,7 @@ removeSpawnMarkerBlock = true
 dataMarker = "Elytra"
 searchRadius = 0
 searchAttempts = 1
-placementY = 80
+placementY = 32
 surfaceYOffset = 0
 spawnOffsetX = 0
 spawnOffsetY = -1
@@ -88,7 +90,7 @@ removeSpawnMarkerBlock = true
 dataMarker = ""
 searchRadius = 1024
 searchAttempts = 64
-placementY = -1
+placementY = 0
 surfaceYOffset = 0
 spawnOffsetX = 0
 spawnOffsetY = 0

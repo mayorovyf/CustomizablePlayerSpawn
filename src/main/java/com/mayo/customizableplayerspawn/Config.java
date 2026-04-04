@@ -85,13 +85,13 @@ public final class Config {
 
     public static final ModConfigSpec.IntValue PLACEMENT_Y = BUILDER
             .comment(
-                    "Fixed Y level for the structure origin.",
-                    "Set to -1 to use the top surface of the found position."
+                    "Y offset from the top surface of the found position.",
+                    "0 places the structure on the surface, positive values place it higher, negative values lower."
             )
-            .defineInRange("placementY", 80, Integer.MIN_VALUE, Integer.MAX_VALUE);
+            .defineInRange("placementY", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
     public static final ModConfigSpec.IntValue SURFACE_Y_OFFSET = BUILDER
-            .comment("Extra Y offset added when placementY is -1.")
+            .comment("Additional legacy Y offset added after placementY. Usually keep this at 0.")
             .defineInRange("surfaceYOffset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
     public static final ModConfigSpec.IntValue SPAWN_OFFSET_X = BUILDER

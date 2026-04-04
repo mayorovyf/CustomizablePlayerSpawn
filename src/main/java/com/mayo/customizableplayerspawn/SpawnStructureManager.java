@@ -394,9 +394,9 @@ public class SpawnStructureManager {
                 continue;
             }
 
-            int baseY = Config.PLACEMENT_Y.get() == -1
-                    ? level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ) + Config.SURFACE_Y_OFFSET.get()
-                    : Config.PLACEMENT_Y.get();
+            int baseY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ)
+                    + Config.PLACEMENT_Y.get()
+                    + Config.SURFACE_Y_OFFSET.get();
             int blockY = Mth.clamp(baseY, level.getMinBuildHeight(), level.getMaxBuildHeight() - 1);
             return Optional.of(new BlockPos(blockX, blockY, blockZ));
         }
