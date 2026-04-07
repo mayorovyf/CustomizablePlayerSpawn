@@ -56,7 +56,7 @@ public class SpawnStructureManager {
         SpawnStructureSavedData data = SpawnStructureSavedData.get(server);
         Optional<SpawnStructureSavedData.ResolvedSpawn> resolvedSpawn = data.resolve(server);
         if (resolvedSpawn.isEmpty()) {
-            resolvedSpawn = createStartStructure(server, data);
+            resolvedSpawn = createConfiguredSpawn(server, data);
         }
 
         if (resolvedSpawn.isEmpty()) {
@@ -99,11 +99,15 @@ public class SpawnStructureManager {
         event.setCopyOriginalSpawnPosition(false);
     }
 
-    private static Optional<SpawnStructureSavedData.ResolvedSpawn> createStartStructure(MinecraftServer server, SpawnStructureSavedData data) {
+    private static Optional<SpawnStructureSavedData.ResolvedSpawn> createConfiguredSpawn(MinecraftServer server, SpawnStructureSavedData data) {
         ServerLevel targetLevel = server.getLevel(Config.targetDimensionKey());
         if (targetLevel == null) {
             CustomizablePlayerSpawnMod.LOGGER.error("Configured spawn dimension {} does not exist.", Config.targetDimensionKey().location());
             return Optional.empty();
+        }
+
+        if (!Config.usesStructurePlacement()) {
+            return createSpawnWithoutStructure(server, data, targetLevel);
         }
 
         Optional<LoadedStructureTemplate> loadedTemplate = resolveConfiguredStructureTemplate(server);
@@ -170,6 +174,41 @@ public class SpawnStructureManager {
         return data.resolve(server);
     }
 
+    private static Optional<SpawnStructureSavedData.ResolvedSpawn> createSpawnWithoutStructure(
+            MinecraftServer server,
+            SpawnStructureSavedData data,
+            ServerLevel targetLevel
+    ) {
+        Optional<BlockPos> origin = findStructureOrigin(targetLevel);
+        if (origin.isEmpty()) {
+            CustomizablePlayerSpawnMod.LOGGER.error(
+                    "Unable to find a valid standalone spawn position in dimension {} after {} attempts.",
+                    targetLevel.dimension().location(),
+                    Config.SEARCH_ATTEMPTS.get()
+            );
+            return Optional.empty();
+        }
+
+        BlockPos spawnOrigin = origin.get();
+        BlockPos spawnPos = spawnOrigin.offset(
+                Config.SPAWN_OFFSET_X.get(),
+                Config.SPAWN_OFFSET_Y.get(),
+                Config.SPAWN_OFFSET_Z.get()
+        );
+        float spawnAngle = Config.spawnAngle();
+
+        targetLevel.setDefaultSpawnPos(spawnPos, spawnAngle);
+        data.setGenerated(targetLevel.dimension(), spawnPos, spawnAngle, spawnOrigin);
+
+        CustomizablePlayerSpawnMod.LOGGER.info(
+                "Configured standalone spawn in {} at {}.",
+                targetLevel.dimension().location(),
+                spawnPos
+        );
+
+        return data.resolve(server);
+    }
+
     private static Optional<LoadedStructureTemplate> resolveConfiguredStructureTemplate(MinecraftServer server) {
         if (Config.hasExternalStructureFile()) {
             Optional<Path> externalPath = Config.externalStructureTemplatePath();
@@ -183,6 +222,10 @@ public class SpawnStructureManager {
             }
 
             return loadExternalStructureTemplate(server, externalPath.get());
+        }
+
+        if (!Config.hasStructureTemplate()) {
+            return Optional.empty();
         }
 
         ResourceLocation templateId = Config.structureTemplateId();

@@ -18,7 +18,9 @@ public final class Config {
 
     public static final ModConfigSpec.ConfigValue<String> TARGET_DIMENSION = BUILDER
             .comment(
-                    "The dimension where the start structure will be generated.",
+                    "The dimension where the start spawn will be created.",
+                    "If structure placement is enabled, the structure is generated there.",
+                    "If structure placement is disabled, the player is spawned there directly.",
                     "Example: minecraft:overworld"
             )
             .define("targetDimension", "minecraft:the_end");
@@ -37,7 +39,8 @@ public final class Config {
                     "Can point to templates provided by vanilla, other mods, datapacks, or the world save.",
                     "The .nbt can be stored inside a datapack/mod resources under data/<namespace>/structure/<path>.nbt",
                     "or inside the world save under generated/<namespace>/structures/<path>.nbt",
-                    "Examples: minecraft:end_city/ship, someothermod:start_house"
+                    "Examples: minecraft:end_city/ship, someothermod:start_house",
+                    "Leave empty together with externalStructureFile to disable structure placement."
             )
             .define("structureTemplate", "minecraft:end_city/ship");
 
@@ -123,8 +126,16 @@ public final class Config {
         return parseResourceLocation(STRUCTURE_TEMPLATE.get(), ResourceLocation.fromNamespaceAndPath(CustomizablePlayerSpawnMod.MODID, "start_spawn"));
     }
 
+    public static boolean hasStructureTemplate() {
+        return !STRUCTURE_TEMPLATE.get().trim().isEmpty();
+    }
+
     public static boolean hasExternalStructureFile() {
         return !EXTERNAL_STRUCTURE_FILE.get().trim().isEmpty();
+    }
+
+    public static boolean usesStructurePlacement() {
+        return hasExternalStructureFile() || hasStructureTemplate();
     }
 
     public static String externalStructureFileName() {
