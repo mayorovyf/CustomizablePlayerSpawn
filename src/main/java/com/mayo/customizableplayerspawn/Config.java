@@ -1,12 +1,12 @@
 package com.mayo.customizableplayerspawn;
 
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -86,6 +86,19 @@ public final class Config {
             .comment("How many candidate positions to try before failing.")
             .defineInRange("searchAttempts", 1, 1, 100_000);
 
+    public static final ModConfigSpec.ConfigValue<String> SURFACE_SEARCH_MODE = BUILDER
+            .comment(
+                    "How to determine the placement Y level.",
+                    "HEIGHTMAP keeps the legacy behaviour.",
+                    "SMART scans the column top-down and validates a real walkable floor.",
+                    "ABSOLUTE_Y uses absoluteY as the base height."
+            )
+            .define("surfaceSearchMode", SurfaceSearchMode.HEIGHTMAP.name(), Config::validateSurfaceSearchMode);
+
+    public static final ModConfigSpec.IntValue ABSOLUTE_Y = BUILDER
+            .comment("Base Y used when surfaceSearchMode is ABSOLUTE_Y.")
+            .defineInRange("absoluteY", 96, Integer.MIN_VALUE, Integer.MAX_VALUE);
+
     public static final ModConfigSpec.IntValue PLACEMENT_Y = BUILDER
             .comment(
                     "Y offset from the top surface of the found position.",
@@ -96,6 +109,37 @@ public final class Config {
     public static final ModConfigSpec.IntValue SURFACE_Y_OFFSET = BUILDER
             .comment("Additional legacy Y offset added after placementY. Usually keep this at 0.")
             .defineInRange("surfaceYOffset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
+
+    public static final ModConfigSpec.IntValue SMART_SEARCH_TOP_OFFSET = BUILDER
+            .comment("Extra offset applied to the top Y bound of SMART search before scanning downward.")
+            .defineInRange("smartSearchTopOffset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
+
+    public static final ModConfigSpec.IntValue SMART_SEARCH_BOTTOM_OFFSET = BUILDER
+            .comment("Extra offset applied to the bottom Y bound of SMART search before scanning downward.")
+            .defineInRange("smartSearchBottomOffset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
+
+    public static final ModConfigSpec.IntValue MAX_SURFACE_STEP = BUILDER
+            .comment("Maximum allowed height difference across the placement footprint in SMART and ABSOLUTE_Y modes.")
+            .defineInRange("maxSurfaceStep", 3, 0, Integer.MAX_VALUE);
+
+    public static final ModConfigSpec.BooleanValue ALLOW_FLUIDS_BELOW = BUILDER
+            .comment("Allow fluid blocks to be used as the supporting floor under the placement.")
+            .define("allowFluidsBelow", false);
+
+    public static final ModConfigSpec.BooleanValue ALLOW_REPLACEABLE_AT_FEET = BUILDER
+            .comment("Allow replaceable blocks such as grass at the feet position during SMART validation.")
+            .define("allowReplaceableAtFeet", true);
+
+    public static final ModConfigSpec.BooleanValue ALLOW_REPLACEABLE_AT_HEAD = BUILDER
+            .comment("Allow replaceable blocks such as grass at the head position during SMART validation.")
+            .define("allowReplaceableAtHead", true);
+
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> FORBIDDEN_SURFACE_BLOCKS = BUILDER
+            .comment(
+                    "Block ids that are never allowed as the support block in SMART and ABSOLUTE_Y modes.",
+                    "Examples: minecraft:lava, minecraft:magma_block"
+            )
+            .defineListAllowEmpty("forbiddenSurfaceBlocks", List.of("minecraft:lava", "minecraft:magma_block"), () -> "", Config::validateResourceLocation);
 
     public static final ModConfigSpec.IntValue SPAWN_OFFSET_X = BUILDER
             .comment("Extra spawn offset X from the chosen marker position.")
@@ -169,6 +213,21 @@ public final class Config {
         return ALLOWED_BIOMES.get().isEmpty();
     }
 
+    public static SurfaceSearchMode surfaceSearchMode() {
+        return SurfaceSearchMode.byName(SURFACE_SEARCH_MODE.get());
+    }
+
+    public static Set<ResourceLocation> forbiddenSurfaceBlockIds() {
+        Set<ResourceLocation> ids = new LinkedHashSet<>();
+        for (String entry : FORBIDDEN_SURFACE_BLOCKS.get()) {
+            ResourceLocation id = ResourceLocation.tryParse(entry);
+            if (id != null) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
     public static String dataMarkerName() {
         return DATA_MARKER.get().trim();
     }
@@ -219,5 +278,33 @@ public final class Config {
 
     private static boolean validateOptionalResourceLocation(Object value) {
         return value instanceof String string && (string.isBlank() || ResourceLocation.tryParse(string) != null);
+    }
+
+    private static boolean validateSurfaceSearchMode(Object value) {
+        return value instanceof String string && SurfaceSearchMode.tryParse(string).isPresent();
+    }
+
+    public enum SurfaceSearchMode {
+        HEIGHTMAP,
+        SMART,
+        ABSOLUTE_Y;
+
+        public static SurfaceSearchMode byName(String name) {
+            return tryParse(name).orElse(HEIGHTMAP);
+        }
+
+        public static Optional<SurfaceSearchMode> tryParse(String name) {
+            if (name == null) {
+                return Optional.empty();
+            }
+
+            for (SurfaceSearchMode mode : values()) {
+                if (mode.name().equalsIgnoreCase(name.trim())) {
+                    return Optional.of(mode);
+                }
+            }
+
+            return Optional.empty();
+        }
     }
 }

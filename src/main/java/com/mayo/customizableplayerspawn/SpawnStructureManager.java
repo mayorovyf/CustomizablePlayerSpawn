@@ -1,11 +1,11 @@
 package com.mayo.customizableplayerspawn;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,6 +17,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.decoration.ItemFrame;
@@ -25,6 +27,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.templatesystem.BlockIgnoreProcessor;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
@@ -41,6 +44,8 @@ public class SpawnStructureManager {
     private static final String STRUCTURE_BLOCK_MODE_TAG = "mode";
     private static final String STRUCTURE_BLOCK_METADATA_TAG = "metadata";
     private static final String STRUCTURE_BLOCK_DATA_MODE = "DATA";
+    private static final Vec3i STANDALONE_SPAWN_FOOTPRINT = new Vec3i(1, 2, 1);
+    private static final int CANDIDATE_FLUID_SCAN_RADIUS = 1;
 
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
@@ -125,7 +130,7 @@ public class SpawnStructureManager {
             return Optional.empty();
         }
 
-        Optional<BlockPos> origin = findStructureOrigin(targetLevel);
+        Optional<BlockPos> origin = findStructureOrigin(targetLevel, template.getSize());
         if (origin.isEmpty()) {
             CustomizablePlayerSpawnMod.LOGGER.error(
                     "Unable to find a valid position for {} in dimension {} after {} attempts.",
@@ -179,7 +184,7 @@ public class SpawnStructureManager {
             SpawnStructureSavedData data,
             ServerLevel targetLevel
     ) {
-        Optional<BlockPos> origin = findStructureOrigin(targetLevel);
+        Optional<BlockPos> origin = findStructureOrigin(targetLevel, STANDALONE_SPAWN_FOOTPRINT);
         if (origin.isEmpty()) {
             CustomizablePlayerSpawnMod.LOGGER.error(
                     "Unable to find a valid standalone spawn position in dimension {} after {} attempts.",
@@ -415,13 +420,71 @@ public class SpawnStructureManager {
         );
     }
 
-    private static Optional<BlockPos> findStructureOrigin(ServerLevel level) {
+    private static Optional<BlockPos> findStructureOrigin(ServerLevel level, Vec3i footprintSize) {
         Set<ResourceLocation> allowedBiomes = Config.allowedBiomeIds();
         if (!Config.allowsAnyBiome() && allowedBiomes.isEmpty()) {
             CustomizablePlayerSpawnMod.LOGGER.error("The allowed biome list contains no valid biome ids.");
             return Optional.empty();
         }
 
+        Config.SurfaceSearchMode searchMode = Config.surfaceSearchMode();
+        if (searchMode == Config.SurfaceSearchMode.HEIGHTMAP) {
+            return findLegacyStructureOrigin(level, allowedBiomes);
+        }
+
+        int searchRadius = Config.SEARCH_RADIUS.get();
+        int searchAttempts = Config.SEARCH_ATTEMPTS.get();
+        int chunkRadius = Math.max(0, Mth.ceil((float) searchRadius / 16.0F));
+        RandomSource random = RandomSource.create(level.getSeed() ^ 0x4350534CL);
+        SearchCandidate bestCandidate = null;
+
+        for (int attempt = 0; attempt < searchAttempts; attempt++) {
+            int chunkX = chunkRadius == 0 ? 0 : random.nextInt(chunkRadius * 2 + 1) - chunkRadius;
+            int chunkZ = chunkRadius == 0 ? 0 : random.nextInt(chunkRadius * 2 + 1) - chunkRadius;
+            int blockX = chunkX * 16 + 8;
+            int blockZ = chunkZ * 16 + 8;
+
+            if (!isBiomeAllowed(level, blockX, blockZ, allowedBiomes)) {
+                debugCandidate(blockX, blockZ, "rejected: biome not allowed");
+                continue;
+            }
+
+            Optional<SearchCandidate> candidate = evaluateCandidate(level, blockX, blockZ, footprintSize, searchMode);
+            if (candidate.isEmpty()) {
+                continue;
+            }
+
+            SearchCandidate acceptedCandidate = candidate.get();
+            debugCandidate(
+                    blockX,
+                    blockZ,
+                    "accepted at y=%s floor=%s step=%s solidIntrusions=%s nearbyFluids=%s score=%s".formatted(
+                            acceptedCandidate.origin().getY(),
+                            acceptedCandidate.floorBlockId(),
+                            acceptedCandidate.surfaceStep(),
+                            acceptedCandidate.solidIntrusions(),
+                            acceptedCandidate.nearbyFluidBlocks(),
+                            acceptedCandidate.score()
+                    )
+            );
+            if (bestCandidate == null || acceptedCandidate.score() > bestCandidate.score()) {
+                bestCandidate = acceptedCandidate;
+            }
+        }
+
+        if (bestCandidate != null) {
+            debugCandidate(
+                    bestCandidate.origin().getX(),
+                    bestCandidate.origin().getZ(),
+                    "selected best candidate at y=%s score=%s".formatted(bestCandidate.origin().getY(), bestCandidate.score())
+            );
+            return Optional.of(bestCandidate.origin());
+        }
+
+        return Optional.empty();
+    }
+
+    private static Optional<BlockPos> findLegacyStructureOrigin(ServerLevel level, Set<ResourceLocation> allowedBiomes) {
         int searchRadius = Config.SEARCH_RADIUS.get();
         int searchAttempts = Config.SEARCH_ATTEMPTS.get();
         int chunkRadius = Math.max(0, Mth.ceil((float) searchRadius / 16.0F));
@@ -445,6 +508,226 @@ public class SpawnStructureManager {
         }
 
         return Optional.empty();
+    }
+
+    private static Optional<SearchCandidate> evaluateCandidate(
+            ServerLevel level,
+            int x,
+            int z,
+            Vec3i footprintSize,
+            Config.SurfaceSearchMode searchMode
+    ) {
+        Optional<ColumnSurface> referenceSurface = searchMode == Config.SurfaceSearchMode.SMART
+                ? findSurfaceCandidate(level, x, z)
+                : Optional.empty();
+        if (searchMode == Config.SurfaceSearchMode.SMART && referenceSurface.isEmpty()) {
+            debugCandidate(x, z, "rejected: no valid walkable surface found in column");
+            return Optional.empty();
+        }
+
+        int originY = switch (searchMode) {
+            case SMART -> applyPlacementOffset(level, referenceSurface.get().feetY());
+            case ABSOLUTE_Y -> clampPlacementY(level, Config.ABSOLUTE_Y.get() + Config.PLACEMENT_Y.get() + Config.SURFACE_Y_OFFSET.get());
+            case HEIGHTMAP -> throw new IllegalStateException("HEIGHTMAP candidates should be handled by legacy search");
+        };
+        BlockPos origin = new BlockPos(x, originY, z);
+
+        if (!fitsBuildHeight(level, origin, footprintSize)) {
+            debugCandidate(x, z, "rejected: placement volume is outside build height at y=" + originY);
+            return Optional.empty();
+        }
+
+        Optional<FootprintAnalysis> footprintAnalysis = analyzeFootprint(level, origin, footprintSize);
+        if (footprintAnalysis.isEmpty()) {
+            debugCandidate(x, z, "rejected: footprint analysis failed unexpectedly");
+            return Optional.empty();
+        }
+
+        FootprintAnalysis analysis = footprintAnalysis.get();
+        if (!analysis.valid()) {
+            debugCandidate(x, z, "rejected: " + analysis.reason());
+            return Optional.empty();
+        }
+
+        int targetY = resolveTargetY(level, x, z, searchMode, referenceSurface);
+        int score = calculateCandidateScore(originY, targetY, analysis.surfaceStep(), analysis.nearbyFluidBlocks(), analysis.solidIntrusions());
+        String floorBlockId = blockId(analysis.referenceFloor());
+        return Optional.of(new SearchCandidate(origin, score, analysis.surfaceStep(), analysis.nearbyFluidBlocks(), analysis.solidIntrusions(), floorBlockId));
+    }
+
+    private static Optional<ColumnSurface> findSurfaceCandidate(ServerLevel level, int x, int z) {
+        int minY = level.getMinBuildHeight();
+        int maxY = level.getMaxBuildHeight() - 1;
+        int searchTop = Mth.clamp(maxY + Config.SMART_SEARCH_TOP_OFFSET.get(), minY, maxY);
+        int searchBottom = Mth.clamp(minY + Config.SMART_SEARCH_BOTTOM_OFFSET.get(), minY, maxY);
+        if (searchTop < searchBottom) {
+            return Optional.empty();
+        }
+
+        for (int y = searchTop; y >= searchBottom; y--) {
+            if (y <= minY || y + 1 >= level.getMaxBuildHeight()) {
+                continue;
+            }
+
+            BlockPos feetPos = new BlockPos(x, y, z);
+            BlockPos floorPos = feetPos.below();
+            BlockPos headPos = feetPos.above();
+            BlockState floorState = level.getBlockState(floorPos);
+            BlockState feetState = level.getBlockState(feetPos);
+            BlockState headState = level.getBlockState(headPos);
+
+            if (!isValidFloor(level, floorPos, floorState)) {
+                continue;
+            }
+
+            if (!isPassable(level, feetPos, feetState, Config.ALLOW_REPLACEABLE_AT_FEET.get())) {
+                continue;
+            }
+
+            if (!isPassable(level, headPos, headState, Config.ALLOW_REPLACEABLE_AT_HEAD.get())) {
+                continue;
+            }
+
+            return Optional.of(new ColumnSurface(feetPos, floorPos, floorState));
+        }
+
+        return Optional.empty();
+    }
+
+    private static Optional<FootprintAnalysis> analyzeFootprint(ServerLevel level, BlockPos origin, Vec3i footprintSize) {
+        int width = Math.max(1, footprintSize.getX());
+        int depth = Math.max(1, footprintSize.getZ());
+        int minSurfaceY = Integer.MAX_VALUE;
+        int maxSurfaceY = Integer.MIN_VALUE;
+        BlockState referenceFloor = level.getBlockState(origin.below());
+
+        for (int dx = 0; dx < width; dx++) {
+            for (int dz = 0; dz < depth; dz++) {
+                int worldX = origin.getX() + dx;
+                int worldZ = origin.getZ() + dz;
+                Optional<ColumnSurface> localSurface = findSurfaceCandidate(level, worldX, worldZ);
+                if (localSurface.isEmpty()) {
+                    return Optional.of(FootprintAnalysis.invalid("footprint column x=%s z=%s has no valid surface".formatted(worldX, worldZ)));
+                }
+
+                ColumnSurface surface = localSurface.get();
+                minSurfaceY = Math.min(minSurfaceY, surface.feetY());
+                maxSurfaceY = Math.max(maxSurfaceY, surface.feetY());
+
+                BlockPos supportPos = new BlockPos(worldX, origin.getY() - 1, worldZ);
+                BlockState supportState = level.getBlockState(supportPos);
+                if (!isValidFloor(level, supportPos, supportState)) {
+                    return Optional.of(FootprintAnalysis.invalid(
+                            "unsafe floor block %s at x=%s y=%s z=%s".formatted(blockId(supportState), worldX, supportPos.getY(), worldZ)
+                    ));
+                }
+            }
+        }
+
+        int surfaceStep = maxSurfaceY - minSurfaceY;
+        if (surfaceStep > Config.MAX_SURFACE_STEP.get()) {
+            return Optional.of(FootprintAnalysis.invalid(
+                    "surface step %s exceeds maxSurfaceStep=%s".formatted(surfaceStep, Config.MAX_SURFACE_STEP.get())
+            ));
+        }
+
+        BlockPos maxPos = origin.offset(width - 1, Math.max(0, footprintSize.getY() - 1), depth - 1);
+        int solidIntrusions = 0;
+        int solidIntrusionLimit = allowedSolidIntrusions(footprintSize);
+
+        for (BlockPos currentPos : BlockPos.betweenClosed(origin, maxPos)) {
+            BlockState state = level.getBlockState(currentPos);
+            if (state.isAir()) {
+                continue;
+            }
+
+            if (isDangerous(state) || !state.getFluidState().isEmpty()) {
+                return Optional.of(FootprintAnalysis.invalid(
+                        "critical block %s inside structure volume at %s".formatted(blockId(state), currentPos)
+                ));
+            }
+
+            if (isSolidIntrusion(level, currentPos, state)) {
+                solidIntrusions++;
+                if (solidIntrusions > solidIntrusionLimit) {
+                    return Optional.of(FootprintAnalysis.invalid(
+                            "structure volume intersects too many solid blocks (%s > %s)".formatted(solidIntrusions, solidIntrusionLimit)
+                    ));
+                }
+            }
+        }
+
+        int nearbyFluidBlocks = countNearbyFluidBlocks(level, origin, footprintSize);
+        return Optional.of(FootprintAnalysis.valid(referenceFloor, surfaceStep, nearbyFluidBlocks, solidIntrusions));
+    }
+
+    private static int countNearbyFluidBlocks(ServerLevel level, BlockPos origin, Vec3i footprintSize) {
+        int minX = origin.getX() - CANDIDATE_FLUID_SCAN_RADIUS;
+        int maxX = origin.getX() + Math.max(0, footprintSize.getX() - 1) + CANDIDATE_FLUID_SCAN_RADIUS;
+        int minY = Math.max(level.getMinBuildHeight(), origin.getY() - 1);
+        int maxY = Math.min(level.getMaxBuildHeight() - 1, origin.getY() + Math.max(1, footprintSize.getY()));
+        int minZ = origin.getZ() - CANDIDATE_FLUID_SCAN_RADIUS;
+        int maxZ = origin.getZ() + Math.max(0, footprintSize.getZ() - 1) + CANDIDATE_FLUID_SCAN_RADIUS;
+        int nearbyFluidBlocks = 0;
+
+        for (BlockPos currentPos : BlockPos.betweenClosed(minX, minY, minZ, maxX, maxY, maxZ)) {
+            if (!level.getFluidState(currentPos).isEmpty()) {
+                nearbyFluidBlocks++;
+            }
+        }
+
+        return nearbyFluidBlocks;
+    }
+
+    private static int allowedSolidIntrusions(Vec3i footprintSize) {
+        int volume = Math.max(1, footprintSize.getX() * footprintSize.getY() * footprintSize.getZ());
+        return Math.max(4, volume / 20);
+    }
+
+    private static boolean fitsBuildHeight(ServerLevel level, BlockPos origin, Vec3i footprintSize) {
+        int minY = level.getMinBuildHeight();
+        int maxY = level.getMaxBuildHeight() - 1;
+        int originY = origin.getY();
+        int topY = originY + Math.max(0, footprintSize.getY() - 1);
+        return originY >= minY && topY <= maxY;
+    }
+
+    private static int applyPlacementOffset(ServerLevel level, int baseY) {
+        return clampPlacementY(level, baseY + Config.PLACEMENT_Y.get() + Config.SURFACE_Y_OFFSET.get());
+    }
+
+    private static int clampPlacementY(ServerLevel level, int y) {
+        return Mth.clamp(y, level.getMinBuildHeight(), level.getMaxBuildHeight() - 1);
+    }
+
+    private static int resolveTargetY(
+            ServerLevel level,
+            int x,
+            int z,
+            Config.SurfaceSearchMode searchMode,
+            Optional<ColumnSurface> referenceSurface
+    ) {
+        return switch (searchMode) {
+            case ABSOLUTE_Y -> clampPlacementY(level, Config.ABSOLUTE_Y.get() + Config.PLACEMENT_Y.get() + Config.SURFACE_Y_OFFSET.get());
+            case SMART -> referenceSurface
+                    .map(surface -> applyPlacementOffset(level, surface.feetY()))
+                    .orElseGet(() -> clampPlacementY(
+                            level,
+                            level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z)
+                                    + Config.PLACEMENT_Y.get()
+                                    + Config.SURFACE_Y_OFFSET.get()
+                    ));
+            case HEIGHTMAP -> clampPlacementY(
+                    level,
+                    level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z)
+                            + Config.PLACEMENT_Y.get()
+                            + Config.SURFACE_Y_OFFSET.get()
+            );
+        };
+    }
+
+    private static int calculateCandidateScore(int originY, int targetY, int surfaceStep, int nearbyFluidBlocks, int solidIntrusions) {
+        return -(Math.abs(originY - targetY) * 16 + surfaceStep * 24 + nearbyFluidBlocks * 8 + solidIntrusions * 3);
     }
 
     private static boolean isBiomeAllowed(ServerLevel level, int x, int z, Set<ResourceLocation> allowedBiomes) {
@@ -501,9 +784,106 @@ public class SpawnStructureManager {
         return persisted;
     }
 
+    private static boolean isValidFloor(ServerLevel level, BlockPos pos, BlockState state) {
+        if (state.isAir()) {
+            return false;
+        }
+
+        if (!Config.ALLOW_FLUIDS_BELOW.get() && !state.getFluidState().isEmpty()) {
+            return false;
+        }
+
+        if (state.is(BlockTags.LEAVES) || state.canBeReplaced() || isDangerous(state)) {
+            return false;
+        }
+
+        if (Config.forbiddenSurfaceBlockIds().contains(BuiltInRegistries.BLOCK.getKey(state.getBlock()))) {
+            return false;
+        }
+
+        return !state.getCollisionShape(level, pos).isEmpty() && state.isFaceSturdy(level, pos, Direction.UP);
+    }
+
+    private static boolean isPassable(ServerLevel level, BlockPos pos, BlockState state, boolean allowReplaceable) {
+        if (state.isAir()) {
+            return true;
+        }
+
+        if (!state.getFluidState().isEmpty() || isDangerous(state)) {
+            return false;
+        }
+
+        if (state.canBeReplaced()) {
+            return allowReplaceable;
+        }
+
+        return state.getCollisionShape(level, pos).isEmpty();
+    }
+
+    private static boolean isSolidIntrusion(ServerLevel level, BlockPos pos, BlockState state) {
+        return !state.canBeReplaced() && !state.getCollisionShape(level, pos).isEmpty();
+    }
+
+    private static boolean isDangerous(BlockState state) {
+        return state.getFluidState().is(FluidTags.LAVA)
+                || state.is(Blocks.LAVA)
+                || state.is(Blocks.LAVA_CAULDRON)
+                || state.is(Blocks.FIRE)
+                || state.is(Blocks.SOUL_FIRE)
+                || state.is(Blocks.CACTUS)
+                || state.is(Blocks.MAGMA_BLOCK)
+                || state.is(Blocks.CAMPFIRE)
+                || state.is(Blocks.SOUL_CAMPFIRE)
+                || state.is(Blocks.POINTED_DRIPSTONE)
+                || state.is(Blocks.SWEET_BERRY_BUSH)
+                || state.is(Blocks.WITHER_ROSE)
+                || state.is(Blocks.POWDER_SNOW);
+    }
+
+    private static String blockId(BlockState state) {
+        return BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+    }
+
+    private static void debugCandidate(int x, int z, String message) {
+        CustomizablePlayerSpawnMod.LOGGER.debug("Candidate x={} z={} {}", x, z, message);
+    }
+
     private record LoadedStructureTemplate(String description, StructureTemplate template) {
     }
 
     private record ConfiguredMarkerBlock(ResourceLocation id, Block block) {
+    }
+
+    private record ColumnSurface(BlockPos feetPos, BlockPos floorPos, BlockState floorState) {
+        private int feetY() {
+            return feetPos.getY();
+        }
+    }
+
+    private record FootprintAnalysis(
+            boolean valid,
+            String reason,
+            BlockState referenceFloor,
+            int surfaceStep,
+            int nearbyFluidBlocks,
+            int solidIntrusions
+    ) {
+        private static FootprintAnalysis invalid(String reason) {
+            return new FootprintAnalysis(false, reason, Blocks.AIR.defaultBlockState(), Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        }
+
+        private static FootprintAnalysis valid(BlockState referenceFloor, int surfaceStep, int nearbyFluidBlocks, int solidIntrusions) {
+            return new FootprintAnalysis(true, "", referenceFloor, surfaceStep, nearbyFluidBlocks, solidIntrusions);
+        }
+    }
+
+    private record SearchCandidate(
+            BlockPos origin,
+            int score,
+            int surfaceStep,
+            int nearbyFluidBlocks,
+            int solidIntrusions,
+            String floorBlockId
+    ) {
     }
 }
