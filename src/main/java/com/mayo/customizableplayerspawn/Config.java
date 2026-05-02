@@ -11,12 +11,12 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 
 public final class Config {
-    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+    private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
 
-    public static final ModConfigSpec.ConfigValue<String> TARGET_DIMENSION = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<String> TARGET_DIMENSION = BUILDER
             .comment(
                     "The dimension where the start spawn will be created.",
                     "If structure placement is enabled, the structure is generated there.",
@@ -25,15 +25,15 @@ public final class Config {
             )
             .define("targetDimension", "minecraft:the_end");
 
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> ALLOWED_BIOMES = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ALLOWED_BIOMES = BUILDER
             .comment(
                     "Allowed biome ids for the start structure search.",
                     "Leave empty to allow any biome.",
                     "Examples: minecraft:plains, minecraft:forest"
             )
-            .defineListAllowEmpty("allowedBiomes", List.of(), () -> "", Config::validateResourceLocation);
+            .defineList("allowedBiomes", List.of(), Config::validateResourceLocation);
 
-    public static final ModConfigSpec.ConfigValue<String> STRUCTURE_TEMPLATE = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<String> STRUCTURE_TEMPLATE = BUILDER
             .comment(
                     "The structure template resource location.",
                     "Can point to templates provided by vanilla, other mods, datapacks, or the world save.",
@@ -44,7 +44,7 @@ public final class Config {
             )
             .define("structureTemplate", "minecraft:end_city/ship");
 
-    public static final ModConfigSpec.ConfigValue<String> EXTERNAL_STRUCTURE_FILE = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<String> EXTERNAL_STRUCTURE_FILE = BUILDER
             .comment(
                     "Optional external .nbt file relative to config/" + CustomizablePlayerSpawnMod.MODID + "/structures.",
                     "Intended for modpacks that ship a loose structure file without rebuilding any jar.",
@@ -54,7 +54,7 @@ public final class Config {
             )
             .define("externalStructureFile", "", Config::validateOptionalExternalStructureFile);
 
-    public static final ModConfigSpec.ConfigValue<String> SPAWN_MARKER_BLOCK = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<String> SPAWN_MARKER_BLOCK = BUILDER
             .comment(
                     "Optional block id used as the spawn anchor inside the placed structure.",
                     "Can be a block from this mod, vanilla, or another mod.",
@@ -62,14 +62,14 @@ public final class Config {
             )
             .define("spawnMarkerBlock", CustomizablePlayerSpawnMod.MODID + ":player_spawn_marker", Config::validateOptionalResourceLocation);
 
-    public static final ModConfigSpec.BooleanValue REMOVE_SPAWN_MARKER_BLOCK = BUILDER
+    public static final ForgeConfigSpec.BooleanValue REMOVE_SPAWN_MARKER_BLOCK = BUILDER
             .comment(
                     "Remove the configured spawn marker block after the structure is placed.",
                     "Disable this if you intentionally use a real decorative block from another mod as the anchor."
             )
             .define("removeSpawnMarkerBlock", true);
 
-    public static final ModConfigSpec.ConfigValue<String> DATA_MARKER = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<String> DATA_MARKER = BUILDER
             .comment(
                     "Optional structure data marker name to use as spawn anchor when the custom marker block is absent.",
                     "Works with DATA structure_block markers from vanilla or other mods.",
@@ -78,15 +78,15 @@ public final class Config {
             )
             .define("dataMarker", "Elytra");
 
-    public static final ModConfigSpec.IntValue SEARCH_RADIUS = BUILDER
+    public static final ForgeConfigSpec.IntValue SEARCH_RADIUS = BUILDER
             .comment("Max radius in blocks for finding a valid biome around 0 0.")
             .defineInRange("searchRadius", 0, 0, 30_000_000);
 
-    public static final ModConfigSpec.IntValue SEARCH_ATTEMPTS = BUILDER
+    public static final ForgeConfigSpec.IntValue SEARCH_ATTEMPTS = BUILDER
             .comment("How many candidate positions to try before failing.")
             .defineInRange("searchAttempts", 1, 1, 100_000);
 
-    public static final ModConfigSpec.ConfigValue<String> SURFACE_SEARCH_MODE = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<String> SURFACE_SEARCH_MODE = BUILDER
             .comment(
                     "How to determine the placement Y level.",
                     "HEIGHTMAP keeps the legacy behaviour.",
@@ -95,69 +95,69 @@ public final class Config {
             )
             .define("surfaceSearchMode", SurfaceSearchMode.HEIGHTMAP.name(), Config::validateSurfaceSearchMode);
 
-    public static final ModConfigSpec.IntValue ABSOLUTE_Y = BUILDER
+    public static final ForgeConfigSpec.IntValue ABSOLUTE_Y = BUILDER
             .comment("Base Y used when surfaceSearchMode is ABSOLUTE_Y.")
             .defineInRange("absoluteY", 96, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue PLACEMENT_Y = BUILDER
+    public static final ForgeConfigSpec.IntValue PLACEMENT_Y = BUILDER
             .comment(
                     "Y offset from the top surface of the found position.",
                     "0 places the structure on the surface, positive values place it higher, negative values lower."
             )
             .defineInRange("placementY", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue SURFACE_Y_OFFSET = BUILDER
+    public static final ForgeConfigSpec.IntValue SURFACE_Y_OFFSET = BUILDER
             .comment("Additional legacy Y offset added after placementY. Usually keep this at 0.")
             .defineInRange("surfaceYOffset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue SMART_SEARCH_TOP_OFFSET = BUILDER
+    public static final ForgeConfigSpec.IntValue SMART_SEARCH_TOP_OFFSET = BUILDER
             .comment("Extra offset applied to the top Y bound of SMART search before scanning downward.")
             .defineInRange("smartSearchTopOffset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue SMART_SEARCH_BOTTOM_OFFSET = BUILDER
+    public static final ForgeConfigSpec.IntValue SMART_SEARCH_BOTTOM_OFFSET = BUILDER
             .comment("Extra offset applied to the bottom Y bound of SMART search before scanning downward.")
             .defineInRange("smartSearchBottomOffset", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue MAX_SURFACE_STEP = BUILDER
+    public static final ForgeConfigSpec.IntValue MAX_SURFACE_STEP = BUILDER
             .comment("Maximum allowed height difference across the placement footprint in SMART and ABSOLUTE_Y modes.")
             .defineInRange("maxSurfaceStep", 3, 0, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.BooleanValue ALLOW_FLUIDS_BELOW = BUILDER
+    public static final ForgeConfigSpec.BooleanValue ALLOW_FLUIDS_BELOW = BUILDER
             .comment("Allow fluid blocks to be used as the supporting floor under the placement.")
             .define("allowFluidsBelow", false);
 
-    public static final ModConfigSpec.BooleanValue ALLOW_REPLACEABLE_AT_FEET = BUILDER
+    public static final ForgeConfigSpec.BooleanValue ALLOW_REPLACEABLE_AT_FEET = BUILDER
             .comment("Allow replaceable blocks such as grass at the feet position during SMART validation.")
             .define("allowReplaceableAtFeet", true);
 
-    public static final ModConfigSpec.BooleanValue ALLOW_REPLACEABLE_AT_HEAD = BUILDER
+    public static final ForgeConfigSpec.BooleanValue ALLOW_REPLACEABLE_AT_HEAD = BUILDER
             .comment("Allow replaceable blocks such as grass at the head position during SMART validation.")
             .define("allowReplaceableAtHead", true);
 
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> FORBIDDEN_SURFACE_BLOCKS = BUILDER
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> FORBIDDEN_SURFACE_BLOCKS = BUILDER
             .comment(
                     "Block ids that are never allowed as the support block in SMART and ABSOLUTE_Y modes.",
                     "Examples: minecraft:lava, minecraft:magma_block"
             )
-            .defineListAllowEmpty("forbiddenSurfaceBlocks", List.of("minecraft:lava", "minecraft:magma_block"), () -> "", Config::validateResourceLocation);
+            .defineList("forbiddenSurfaceBlocks", List.of("minecraft:lava", "minecraft:magma_block"), Config::validateResourceLocation);
 
-    public static final ModConfigSpec.IntValue SPAWN_OFFSET_X = BUILDER
+    public static final ForgeConfigSpec.IntValue SPAWN_OFFSET_X = BUILDER
             .comment("Extra spawn offset X from the chosen marker position.")
             .defineInRange("spawnOffsetX", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue SPAWN_OFFSET_Y = BUILDER
+    public static final ForgeConfigSpec.IntValue SPAWN_OFFSET_Y = BUILDER
             .comment("Extra spawn offset Y from the chosen marker position.")
             .defineInRange("spawnOffsetY", -1, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue SPAWN_OFFSET_Z = BUILDER
+    public static final ForgeConfigSpec.IntValue SPAWN_OFFSET_Z = BUILDER
             .comment("Extra spawn offset Z from the chosen marker position.")
             .defineInRange("spawnOffsetZ", 1, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue SPAWN_ANGLE = BUILDER
+    public static final ForgeConfigSpec.IntValue SPAWN_ANGLE = BUILDER
             .comment("Yaw angle used for the saved spawn point.")
             .defineInRange("spawnAngle", 180, -360, 360);
 
-    static final ModConfigSpec SPEC = BUILDER.build();
+    static final ForgeConfigSpec SPEC = BUILDER.build();
 
     private Config() {
     }
@@ -167,7 +167,10 @@ public final class Config {
     }
 
     public static ResourceLocation structureTemplateId() {
-        return parseResourceLocation(STRUCTURE_TEMPLATE.get(), ResourceLocation.fromNamespaceAndPath(CustomizablePlayerSpawnMod.MODID, "start_spawn"));
+        return parseResourceLocation(
+                STRUCTURE_TEMPLATE.get(),
+                ResourceLocation.tryParse(CustomizablePlayerSpawnMod.MODID + ":start_spawn")
+        );
     }
 
     public static boolean hasStructureTemplate() {

@@ -11,7 +11,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -32,11 +31,9 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.templatesystem.BlockIgnoreProcessor;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
-import net.minecraft.world.level.portal.DimensionTransition;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerRespawnPositionEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 public class SpawnStructureManager {
     private static final String PLAYER_SPAWN_DATA_KEY = CustomizablePlayerSpawnMod.MODID + ".initial_spawn_applied";
@@ -68,6 +65,8 @@ public class SpawnStructureManager {
             return;
         }
 
+        ensureRespawnPosition(player, resolvedSpawn.get());
+
         if (hasInitialSpawnBeenApplied(player)) {
             return;
         }
@@ -76,8 +75,11 @@ public class SpawnStructureManager {
     }
 
     @SubscribeEvent
-    public void onPlayerRespawnPosition(PlayerRespawnPositionEvent event) {
-        ServerPlayer player = (ServerPlayer) event.getEntity();
+    public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.isEndConquered() || !(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+
         if (player.getRespawnPosition() != null) {
             return;
         }
@@ -93,15 +95,8 @@ public class SpawnStructureManager {
         }
 
         SpawnStructureSavedData.ResolvedSpawn spawn = resolvedSpawn.get();
-        event.setDimensionTransition(new DimensionTransition(
-                spawn.level(),
-                spawn.teleportPosition(),
-                Vec3.ZERO,
-                spawn.spawnAngle(),
-                0.0F,
-                DimensionTransition.DO_NOTHING
-        ));
-        event.setCopyOriginalSpawnPosition(false);
+        ensureRespawnPosition(player, spawn);
+        teleportToResolvedSpawn(player, spawn);
     }
 
     private static Optional<SpawnStructureSavedData.ResolvedSpawn> createConfiguredSpawn(MinecraftServer server, SpawnStructureSavedData data) {
@@ -269,7 +264,7 @@ public class SpawnStructureManager {
 
         try {
             StructureTemplate template = server.getStructureManager().readStructure(
-                    NbtIo.readCompressed(absoluteConfiguredPath, NbtAccounter.unlimitedHeap())
+                    NbtIo.readCompressed(absoluteConfiguredPath.toFile())
             );
             return Optional.of(new LoadedStructureTemplate(absoluteConfiguredPath.toString(), template));
         } catch (IOException exception) {
@@ -756,9 +751,8 @@ public class SpawnStructureManager {
     }
 
     private static void applyInitialSpawn(ServerPlayer player, SpawnStructureSavedData.ResolvedSpawn spawn) {
-        Vec3 position = spawn.teleportPosition();
-        player.teleportTo(spawn.level(), position.x, position.y, position.z, spawn.spawnAngle(), 0.0F);
-        player.setRespawnPosition(spawn.level().dimension(), spawn.spawnPos(), spawn.spawnAngle(), true, false);
+        teleportToResolvedSpawn(player, spawn);
+        ensureRespawnPosition(player, spawn);
 
         markInitialSpawnApplied(player);
 
@@ -768,6 +762,17 @@ public class SpawnStructureManager {
                 spawn.spawnPos(),
                 spawn.level().dimension().location()
         );
+    }
+
+    private static void teleportToResolvedSpawn(ServerPlayer player, SpawnStructureSavedData.ResolvedSpawn spawn) {
+        Vec3 position = spawn.teleportPosition();
+        player.teleportTo(spawn.level(), position.x, position.y, position.z, spawn.spawnAngle(), 0.0F);
+    }
+
+    private static void ensureRespawnPosition(ServerPlayer player, SpawnStructureSavedData.ResolvedSpawn spawn) {
+        if (player.getRespawnPosition() == null) {
+            player.setRespawnPosition(spawn.level().dimension(), spawn.spawnPos(), spawn.spawnAngle(), true, false);
+        }
     }
 
     private static boolean hasInitialSpawnBeenApplied(ServerPlayer player) {

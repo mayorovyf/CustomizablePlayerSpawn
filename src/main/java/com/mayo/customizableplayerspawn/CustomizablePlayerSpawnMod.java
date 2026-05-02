@@ -4,36 +4,43 @@ import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
-import net.neoforged.neoforge.registries.DeferredBlock;
-import net.neoforged.neoforge.registries.DeferredItem;
-import net.neoforged.neoforge.registries.DeferredRegister;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 @Mod(CustomizablePlayerSpawnMod.MODID)
 public class CustomizablePlayerSpawnMod {
     public static final String MODID = "customizableplayerspawn";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MODID);
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
+    public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MODID);
+    public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
 
-    public static final DeferredBlock<Block> PLAYER_SPAWN_MARKER = BLOCKS.register("player_spawn_marker", PlayerSpawnMarkerBlock::new);
-    public static final DeferredItem<BlockItem> PLAYER_SPAWN_MARKER_ITEM = ITEMS.registerSimpleBlockItem("player_spawn_marker", PLAYER_SPAWN_MARKER);
+    public static final RegistryObject<Block> PLAYER_SPAWN_MARKER = BLOCKS.register("player_spawn_marker", PlayerSpawnMarkerBlock::new);
+    public static final RegistryObject<BlockItem> PLAYER_SPAWN_MARKER_ITEM = ITEMS.register(
+            "player_spawn_marker",
+            () -> new BlockItem(PLAYER_SPAWN_MARKER.get(), new Item.Properties())
+    );
 
-    public CustomizablePlayerSpawnMod(IEventBus modEventBus, ModContainer modContainer) {
+    @SuppressWarnings("removal")
+    public CustomizablePlayerSpawnMod() {
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
 
         modEventBus.addListener(this::addCreative);
-        modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);
 
-        NeoForge.EVENT_BUS.register(new SpawnStructureManager());
+        MinecraftForge.EVENT_BUS.register(new SpawnStructureManager());
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {

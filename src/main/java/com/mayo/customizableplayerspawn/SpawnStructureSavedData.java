@@ -2,7 +2,6 @@ package com.mayo.customizableplayerspawn;
 
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
@@ -32,14 +31,10 @@ public class SpawnStructureSavedData extends SavedData {
     private BlockPos structureOrigin = BlockPos.ZERO;
 
     public static SpawnStructureSavedData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(factory(), FILE_ID);
+        return server.overworld().getDataStorage().computeIfAbsent(SpawnStructureSavedData::load, SpawnStructureSavedData::new, FILE_ID);
     }
 
-    public static SavedData.Factory<SpawnStructureSavedData> factory() {
-        return new SavedData.Factory<>(SpawnStructureSavedData::new, SpawnStructureSavedData::load);
-    }
-
-    private static SpawnStructureSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
+    private static SpawnStructureSavedData load(CompoundTag tag) {
         SpawnStructureSavedData data = new SpawnStructureSavedData();
         data.generated = tag.getBoolean(GENERATED_TAG);
         data.dimensionId = tag.getString(DIMENSION_TAG);
@@ -50,7 +45,7 @@ public class SpawnStructureSavedData extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    public CompoundTag save(CompoundTag tag) {
         tag.putBoolean(GENERATED_TAG, generated);
         tag.putString(DIMENSION_TAG, dimensionId);
         tag.putInt(SPAWN_X_TAG, spawnPos.getX());
