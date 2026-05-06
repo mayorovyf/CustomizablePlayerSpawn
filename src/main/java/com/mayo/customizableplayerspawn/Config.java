@@ -8,10 +8,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.fml.loading.FMLPaths;
 
 public final class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
@@ -32,6 +37,14 @@ public final class Config {
                     "Examples: minecraft:plains, minecraft:forest"
             )
             .defineListAllowEmpty("allowedBiomes", List.of(), () -> "", Config::validateResourceLocation);
+
+    public static final ModConfigSpec.ConfigValue<String> SELECTED_PROFILE = BUILDER
+            .comment(
+                    "Optional 2.0 profile id to force from config/" + CustomizablePlayerSpawnMod.MODID + "/profiles.",
+                    "Leave empty to select the enabled valid profile with the highest priority.",
+                    "Legacy settings below are used only when no enabled valid profile exists."
+            )
+            .define("selectedProfile", "");
 
     public static final ModConfigSpec.ConfigValue<String> STRUCTURE_TEMPLATE = BUILDER
             .comment(
@@ -141,6 +154,58 @@ public final class Config {
             )
             .defineListAllowEmpty("forbiddenSurfaceBlocks", List.of("minecraft:lava", "minecraft:magma_block"), () -> "", Config::validateResourceLocation);
 
+    public static final ModConfigSpec.ConfigValue<String> TERRAIN_PREPARATION_MODE = BUILDER
+            .comment(
+                    "How to prepare terrain before placing the configured structure.",
+                    "NONE places the structure directly.",
+                    "ISLAND creates a deterministic natural-looking mound under the structure and clears the placement volume."
+            )
+            .define("terrainPreparationMode", TerrainPreparationMode.NONE.name(), Config::validateTerrainPreparationMode);
+
+    public static final ModConfigSpec.IntValue TERRAIN_PADDING = BUILDER
+            .comment("Extra horizontal blocks around the structure footprint affected by ISLAND terrain preparation.")
+            .defineInRange("terrainPadding", 10, 0, 64);
+
+    public static final ModConfigSpec.ConfigValue<String> TERRAIN_TOP_BLOCK = BUILDER
+            .comment("Top block used by ISLAND terrain preparation.")
+            .define("terrainTopBlock", "minecraft:grass_block", Config::validateBlockResourceLocation);
+
+    public static final ModConfigSpec.ConfigValue<String> TERRAIN_FILL_BLOCK = BUILDER
+            .comment("Subsurface fill block used by ISLAND terrain preparation.")
+            .define("terrainFillBlock", "minecraft:dirt", Config::validateBlockResourceLocation);
+
+    public static final ModConfigSpec.ConfigValue<String> TERRAIN_CORE_BLOCK = BUILDER
+            .comment("Deep core block used by ISLAND terrain preparation.")
+            .define("terrainCoreBlock", "minecraft:stone", Config::validateBlockResourceLocation);
+
+    public static final ModConfigSpec.BooleanValue TERRAIN_EDGE_NOISE = BUILDER
+            .comment("Use deterministic noise to break up ISLAND terrain edges.")
+            .define("terrainEdgeNoise", true);
+
+    public static final ModConfigSpec.BooleanValue CLEAR_STRUCTURE_VOLUME = BUILDER
+            .comment("Clear solid blocks, fluids, trees, and plants from the structure placement volume before placement.")
+            .define("clearStructureVolume", true);
+
+    public static final ModConfigSpec.IntValue CLEAR_VOLUME_PADDING = BUILDER
+            .comment("Extra horizontal and vertical air clearance around the structure volume.")
+            .defineInRange("clearVolumePadding", 2, 0, 32);
+
+    public static final ModConfigSpec.BooleanValue FILL_SUPPORT_VOIDS = BUILDER
+            .comment("Fill small air gaps directly under the placed structure without creating an artificial mound.")
+            .define("fillSupportVoids", true);
+
+    public static final ModConfigSpec.IntValue SUPPORT_VOID_MAX_FILL_DEPTH = BUILDER
+            .comment("Maximum blocks to fill downward under each real structure support column.")
+            .defineInRange("supportVoidMaxFillDepth", 8, 0, 32);
+
+    public static final ModConfigSpec.IntValue ISLAND_MAX_DROP = BUILDER
+            .comment("Maximum Y drop from the structure floor to the outer ISLAND edge.")
+            .defineInRange("islandMaxDrop", 8, 0, 64);
+
+    public static final ModConfigSpec.IntValue ISLAND_EDGE_FALLOFF = BUILDER
+            .comment("How many blocks outside the structure footprint are used for the main ISLAND slope.")
+            .defineInRange("islandEdgeFalloff", 6, 1, 64);
+
     public static final ModConfigSpec.IntValue SPAWN_OFFSET_X = BUILDER
             .comment("Extra spawn offset X from the chosen marker position.")
             .defineInRange("spawnOffsetX", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
@@ -167,7 +232,10 @@ public final class Config {
     }
 
     public static ResourceLocation structureTemplateId() {
-        return parseResourceLocation(STRUCTURE_TEMPLATE.get(), ResourceLocation.fromNamespaceAndPath(CustomizablePlayerSpawnMod.MODID, "start_spawn"));
+        return parseResourceLocation(
+                STRUCTURE_TEMPLATE.get(),
+                ResourceLocation.tryParse(CustomizablePlayerSpawnMod.MODID + ":start_spawn")
+        );
     }
 
     public static boolean hasStructureTemplate() {
@@ -187,7 +255,7 @@ public final class Config {
     }
 
     public static Path externalStructureBaseDirectory() {
-        return Paths.get("config", CustomizablePlayerSpawnMod.MODID, "structures");
+        return FMLPaths.CONFIGDIR.get().resolve(CustomizablePlayerSpawnMod.MODID).resolve("structures");
     }
 
     public static Optional<Path> externalStructureTemplatePath() {
@@ -226,6 +294,22 @@ public final class Config {
             }
         }
         return ids;
+    }
+
+    public static TerrainPreparationMode terrainPreparationMode() {
+        return TerrainPreparationMode.byName(TERRAIN_PREPARATION_MODE.get());
+    }
+
+    public static BlockState terrainTopBlockState() {
+        return blockStateByName(TERRAIN_TOP_BLOCK.get(), Blocks.GRASS_BLOCK);
+    }
+
+    public static BlockState terrainFillBlockState() {
+        return blockStateByName(TERRAIN_FILL_BLOCK.get(), Blocks.DIRT);
+    }
+
+    public static BlockState terrainCoreBlockState() {
+        return blockStateByName(TERRAIN_CORE_BLOCK.get(), Blocks.STONE);
     }
 
     public static String dataMarkerName() {
@@ -284,6 +368,30 @@ public final class Config {
         return value instanceof String string && SurfaceSearchMode.tryParse(string).isPresent();
     }
 
+    private static boolean validateTerrainPreparationMode(Object value) {
+        return value instanceof String string && TerrainPreparationMode.tryParse(string).isPresent();
+    }
+
+    private static boolean validateBlockResourceLocation(Object value) {
+        if (!(value instanceof String string)) {
+            return false;
+        }
+
+        ResourceLocation id = ResourceLocation.tryParse(string);
+        return id != null && BuiltInRegistries.BLOCK.containsKey(id);
+    }
+
+    private static BlockState blockStateByName(String name, Block fallback) {
+        ResourceLocation id = ResourceLocation.tryParse(name);
+        if (id == null) {
+            return fallback.defaultBlockState();
+        }
+
+        return BuiltInRegistries.BLOCK.getOptional(id)
+                .map(Block::defaultBlockState)
+                .orElseGet(fallback::defaultBlockState);
+    }
+
     public enum SurfaceSearchMode {
         HEIGHTMAP,
         SMART,
@@ -299,6 +407,29 @@ public final class Config {
             }
 
             for (SurfaceSearchMode mode : values()) {
+                if (mode.name().equalsIgnoreCase(name.trim())) {
+                    return Optional.of(mode);
+                }
+            }
+
+            return Optional.empty();
+        }
+    }
+
+    public enum TerrainPreparationMode {
+        NONE,
+        ISLAND;
+
+        public static TerrainPreparationMode byName(String name) {
+            return tryParse(name).orElse(NONE);
+        }
+
+        public static Optional<TerrainPreparationMode> tryParse(String name) {
+            if (name == null) {
+                return Optional.empty();
+            }
+
+            for (TerrainPreparationMode mode : values()) {
                 if (mode.name().equalsIgnoreCase(name.trim())) {
                     return Optional.of(mode);
                 }

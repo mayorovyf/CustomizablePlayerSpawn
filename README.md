@@ -1,12 +1,16 @@
 # Customizable Player Spawn
 
-Это мод для NeoForge, который меняет стартовую точку игрока. Вместо обычного спавна мод может поставить готовую структуру и поселить игрока прямо внутри нее, либо просто перенести игрока в нужное измерение без генерации структуры. Подходит для стартовых островов, домов, лобби и любых других заготовок, которые лежат в `.nbt`.
+Это мод для Forge, который меняет стартовую точку игрока. Вместо обычного спавна мод может поставить готовую структуру и поселить игрока прямо внутри нее, либо просто перенести игрока в нужное измерение без генерации структуры. Подходит для стартовых островов, домов, лобби и любых других заготовок, которые лежат в `.nbt`.
 
 Мод читает настройки из конфига и берет оттуда измерение, список биомов, путь к структуре и точку, к которой нужно привязать спавн. Структура может быть ванильной, может лежать в вашем моде, а может приходить из другого мода или датапака. После первого входа в мир мод один раз создает стартовую точку, сохраняет найденные координаты и потом использует их как общий стартовый спавн.
 
 ## Как пользоваться
 
-Откройте файл `config/customizableplayerspawn-common.toml` и укажите нужную структуру в параметре `structureTemplate`. Если у вас своя `.nbt`, положите ее в `data/<namespace>/structure/<path>.nbt` или в сохранение мира по пути `generated/<namespace>/structures/<path>.nbt`. Если структура приходит из другого мода, достаточно прописать ее id в формате `modid:path`.
+Начиная с `2.0.0`, основной способ настройки это профили в `config/customizableplayerspawn/profiles/*.toml`. Первый включенный профиль по имени файла становится активным. Если папки профилей нет или в ней нет включенных профилей, мод использует старый `config/customizableplayerspawn-common.toml`, поэтому существующие сборки продолжают работать.
+
+В профиле укажите нужную структуру через `structure`. Для структуры из ресурсов, датапака или другого мода используйте id вида `modid:path`. Для loose `.nbt` рядом с конфигом используйте `config:<file>.nbt`; файл должен лежать в `config/customizableplayerspawn/structures/`.
+
+Старый файл `config/customizableplayerspawn-common.toml` по-прежнему поддерживается. В нем структура задается через `structureTemplate` или `externalStructureFile`. Если у вас своя `.nbt`, положите ее в `data/<namespace>/structure/<path>.nbt`, в сохранение мира по пути `generated/<namespace>/structures/<path>.nbt`, либо в `config/customizableplayerspawn/structures/`.
 
 Для модпаков доступен отдельный вариант без датапаков и без пересборки `.jar`: положите файл в `config/customizableplayerspawn/structures/<name>.nbt` и укажите его через `externalStructureFile`. Такой файл будет доступен для любого нового мира сразу после установки сборки, игроку ничего вручную добавлять не нужно.
 
@@ -176,6 +180,84 @@ spawnAngle = 0
 ```
 
 В этом режиме `spawnMarkerBlock` и `dataMarker` не используются, потому что точка спавна берется напрямую из найденной позиции.
+
+## Профили 2.0
+
+Минимальный профиль выглядит так:
+
+```toml
+schemaVersion = 2
+id = "starter_house"
+enabled = true
+priority = 100
+dimension = "minecraft:overworld"
+structure = "config:starter_house.nbt"
+
+[anchor]
+mode = "MARKER_BLOCK"
+markerBlock = "customizableplayerspawn:player_spawn_marker"
+removeMarkerBlock = true
+dataMarker = ""
+offsetX = 0
+offsetY = 0
+offsetZ = 0
+angle = 0
+fallback = "SAFE_NEARBY"
+
+[placement]
+strategy = "FLAT_FOOTPRINT"
+allowedBiomes = ["minecraft:plains", "minecraft:forest"]
+searchRadius = 2048
+searchAttempts = 128
+surfaceSearchMode = "SMART"
+absoluteY = 96
+placementY = 0
+surfaceYOffset = 0
+smartSearchTopOffset = 0
+smartSearchBottomOffset = 0
+maxSurfaceStep = 3
+allowFluidsBelow = false
+allowReplaceableAtFeet = true
+allowReplaceableAtHead = true
+forbiddenSurfaceBlocks = ["minecraft:lava", "minecraft:magma_block"]
+minLandRatio = 0.85
+maxTreeOverlap = 0
+avoidFluids = true
+
+[terrain]
+mode = "NONE"
+padding = 10
+topBlock = "minecraft:grass_block"
+fillBlock = "minecraft:dirt"
+coreBlock = "minecraft:stone"
+edgeNoise = true
+clearStructureVolume = true
+clearVolumePadding = 0
+fillSupportVoids = true
+supportVoidMaxFillDepth = 8
+islandMaxDrop = 8
+islandEdgeFalloff = 6
+
+[postprocess]
+refreshLighting = true
+refreshLightingDelays = [5, 20, 60]
+suppressDrops = true
+stabilizeBlocks = false
+updateNeighborShapes = false
+processDataMarkers = true
+```
+
+Профили нужны для модпаков: настройки структуры, якоря, поиска поверхности, подготовки земли и пост-обработки теперь находятся в одном переносимом файле. Legacy-конфиг остается только слоем совместимости.
+
+Выбор профиля:
+
+- если в `customizableplayerspawn-common.toml` задан `selectedProfile`, мод пытается использовать именно этот профиль;
+- если `selectedProfile` пустой, выбирается включенный валидный профиль с самым большим `priority`;
+- если валидных включенных профилей нет, используется legacy-конфиг.
+
+Доступные `placement.strategy`: `DIRECT`, `SURFACE`, `FLAT_FOOTPRINT`, `EMBEDDED`, `ISLAND`, `AUTO`.
+Доступные `anchor.mode`: `AUTO`, `MARKER_BLOCK`, `DATA_MARKER`, `RELATIVE`, `CENTER`.
+Доступные `anchor.fallback`: `FAIL`, `CENTER`, `SAFE_NEARBY`.
 
 ## Поиск поверхности
 
