@@ -1,16 +1,16 @@
 # Customizable Player Spawn
 
-Это мод для Forge, который меняет стартовую точку игрока. Вместо обычного спавна мод может поставить готовую структуру и поселить игрока прямо внутри нее, либо просто перенести игрока в нужное измерение без генерации структуры. Подходит для стартовых островов, домов, лобби и любых других заготовок, которые лежат в `.nbt`.
+Это мульти-лоадер мод для Forge, NeoForge и Fabric, который меняет стартовую точку игрока. Вместо обычного спавна мод может поставить готовую структуру и поселить игрока прямо внутри нее, либо просто перенести игрока в нужное измерение без генерации структуры. Подходит для стартовых островов, домов, лобби и любых других заготовок, которые лежат в `.nbt`.
 
-Мод читает настройки из конфига и берет оттуда измерение, список биомов, путь к структуре и точку, к которой нужно привязать спавн. Структура может быть ванильной, может лежать в вашем моде, а может приходить из другого мода или датапака. После первого входа в мир мод один раз создает стартовую точку, сохраняет найденные координаты и потом использует их как общий стартовый спавн.
+Мод читает настройки из конфига и берет оттуда измерение, список биомов, путь к структуре и точку, к которой нужно привязать спавн. Структура может быть ванильной, может лежать в вашем моде, а может приходить из другого мода или датапака. Мод умеет создать одну общую структуру для всех игроков или отдельную структуру для каждого игрока, сохранить привязки и защитить поставленные структуры от разрушения.
 
 ## Как пользоваться
 
-Начиная с `2.0.0`, основной способ настройки это профили в `config/customizableplayerspawn/profiles/*.toml`. Первый включенный профиль по имени файла становится активным. Если папки профилей нет или в ней нет включенных профилей, мод использует старый `config/customizableplayerspawn-common.toml`, поэтому существующие сборки продолжают работать.
+Начиная с `2.0.0`, основной способ настройки это профили в `config/customizableplayerspawn/profiles/*.toml`. Если в `config/customizableplayerspawn/settings.toml` задан `selectedProfile`, мод пытается использовать именно этот профиль. Если `selectedProfile` пустой, выбирается включенный валидный профиль с самым большим `priority`. Если папки профилей нет или в ней нет включенных валидных профилей, мод использует старый `config/customizableplayerspawn-common.toml`, поэтому существующие сборки продолжают работать.
 
 В профиле укажите нужную структуру через `structure`. Для структуры из ресурсов, датапака или другого мода используйте id вида `modid:path`. Для loose `.nbt` рядом с конфигом используйте `config:<file>.nbt`; файл должен лежать в `config/customizableplayerspawn/structures/`.
 
-Старый файл `config/customizableplayerspawn-common.toml` по-прежнему поддерживается. В нем структура задается через `structureTemplate` или `externalStructureFile`. Если у вас своя `.nbt`, положите ее в `data/<namespace>/structure/<path>.nbt`, в сохранение мира по пути `generated/<namespace>/structures/<path>.nbt`, либо в `config/customizableplayerspawn/structures/`.
+Старый файл `config/customizableplayerspawn-common.toml` по-прежнему поддерживается на всех лоадерах как legacy TOML. В нем структура задается через `structureTemplate` или `externalStructureFile`. Если у вас своя `.nbt`, положите ее в `data/<namespace>/structure/<path>.nbt`, в сохранение мира по пути `generated/<namespace>/structures/<path>.nbt`, либо в `config/customizableplayerspawn/structures/`.
 
 Для модпаков доступен отдельный вариант без датапаков и без пересборки `.jar`: положите файл в `config/customizableplayerspawn/structures/<name>.nbt` и укажите его через `externalStructureFile`. Такой файл будет доступен для любого нового мира сразу после установки сборки, игроку ничего вручную добавлять не нужно.
 
@@ -181,7 +181,7 @@ spawnAngle = 0
 
 В этом режиме `spawnMarkerBlock` и `dataMarker` не используются, потому что точка спавна берется напрямую из найденной позиции.
 
-## Профили 2.0
+## Профили 2.1
 
 Минимальный профиль выглядит так:
 
@@ -245,19 +245,55 @@ suppressDrops = true
 stabilizeBlocks = false
 updateNeighborShapes = false
 processDataMarkers = true
+
+[spawnPolicy]
+mode = "shared"
+assignExistingPlayers = true
+respawnAtAssignedStructure = true
+respectBedsAndAnchors = true
+maxInstances = 0
+minDistanceBetweenInstances = 512
+
+[protection]
+enabled = false
+protectBlocks = true
+protectBlockPlacement = true
+protectContainers = false
+protectExplosions = true
+protectFire = true
+protectFluids = true
+allowOps = true
+allowOwner = false
+padding = 0
 ```
 
 Профили нужны для модпаков: настройки структуры, якоря, поиска поверхности, подготовки земли и пост-обработки теперь находятся в одном переносимом файле. Legacy-конфиг остается только слоем совместимости.
 
 Выбор профиля:
 
-- если в `customizableplayerspawn-common.toml` задан `selectedProfile`, мод пытается использовать именно этот профиль;
+- если в `config/customizableplayerspawn/settings.toml` задан `selectedProfile`, мод пытается использовать именно этот профиль;
+- если `settings.toml` пустой, но в `customizableplayerspawn-common.toml` задан `selectedProfile`, используется legacy-значение;
 - если `selectedProfile` пустой, выбирается включенный валидный профиль с самым большим `priority`;
 - если валидных включенных профилей нет, используется legacy-конфиг.
 
 Доступные `placement.strategy`: `DIRECT`, `SURFACE`, `FLAT_FOOTPRINT`, `EMBEDDED`, `ISLAND`, `AUTO`.
 Доступные `anchor.mode`: `AUTO`, `MARKER_BLOCK`, `DATA_MARKER`, `RELATIVE`, `CENTER`.
 Доступные `anchor.fallback`: `FAIL`, `CENTER`, `SAFE_NEARBY`.
+Доступные `spawnPolicy.mode`: `shared`, `per_player`.
+
+`shared` создает одну структуру и назначает ее всем игрокам. `per_player` создает отдельную структуру при первом входе каждого игрока и не пересекает ее с уже сохраненными instances. Для серверов обычно стоит держать `minDistanceBetweenInstances` больше размера структуры и задавать разумный `searchAttempts`.
+
+## Команды
+
+Команды требуют OP level 2:
+
+- `/cps reload` перечитывает профили.
+- `/cps status` показывает активный профиль, режим, protection и количество instances.
+- `/cps validate` проверяет активный профиль.
+- `/cps list` показывает сохраненные структуры.
+- `/cps reset` или `/cps reset all` очищает все structures/assignments.
+- `/cps reset player <player>` сбрасывает привязку игрока.
+- `/cps tp <player>` телепортирует игрока к назначенной структуре.
 
 ## Поиск поверхности
 

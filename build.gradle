@@ -1,125 +1,39 @@
 plugins {
-    id 'eclipse'
-    id 'idea'
-    id 'maven-publish'
-    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'base'
 }
 
 version = mod_version
 group = mod_group_id
 
-base {
-    archivesName = "${mod_id}-${mod_loader}-${minecraft_version}"
+tasks.register('buildForge', GradleBuild) {
+    group = 'build'
+    description = 'Builds the Forge loader jar.'
+    dir = file('forge')
+    tasks = ['build']
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(17)
-
-minecraft {
-    mappings channel: mapping_channel, version: mapping_version
-    copyIdeResources = true
-
-    runs {
-        configureEach {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-
-            mods {
-                "${mod_id}" {
-                    source sourceSets.main
-                }
-            }
-        }
-
-        client {
-            property 'forge.enabledGameTestNamespaces', mod_id
-        }
-
-        server {
-            property 'forge.enabledGameTestNamespaces', mod_id
-            args '--nogui'
-        }
-
-        gameTestServer {
-            property 'forge.enabledGameTestNamespaces', mod_id
-        }
-
-        data {
-            workingDirectory project.file('run-data')
-            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
-        }
-    }
+tasks.register('buildFabric', GradleBuild) {
+    group = 'build'
+    description = 'Builds the Fabric loader jar.'
+    dir = file('fabric')
+    tasks = ['build']
 }
 
-sourceSets.main.resources {
-    srcDir 'src/generated/resources'
-    exclude '**/*.bbmodel'
-    exclude 'src/generated/**/.cache'
+tasks.register('buildNeoForge', GradleBuild) {
+    group = 'build'
+    description = 'Builds the NeoForge loader jar.'
+    dir = file('neoforge')
+    tasks = ['build']
 }
 
-repositories {
+tasks.register('buildLoaders') {
+    group = 'build'
+    description = 'Builds Forge, Fabric, and NeoForge loader jars.'
+    dependsOn tasks.named('buildForge')
+    dependsOn tasks.named('buildFabric')
+    dependsOn tasks.named('buildNeoForge')
 }
 
-dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-}
-
-tasks.named('processResources', ProcessResources).configure {
-    var replaceProperties = [
-            minecraft_version      : minecraft_version,
-            minecraft_version_range: minecraft_version_range,
-            forge_version          : forge_version,
-            forge_version_range    : forge_version_range,
-            loader_version_range   : loader_version_range,
-            mod_id                 : mod_id,
-            mod_name               : mod_name,
-            mod_license            : mod_license,
-            mod_version            : mod_version,
-    ]
-    inputs.properties replaceProperties
-    filesMatching(['META-INF/mods.toml']) {
-        expand replaceProperties
-    }
-}
-
-tasks.named('jar', Jar).configure {
-    manifest {
-        attributes([
-                'Specification-Title'     : mod_id,
-                'Specification-Vendor'    : 'mayo',
-                'Specification-Version'   : '1',
-                'Implementation-Title'    : project.name,
-                'Implementation-Version'  : project.version,
-                'Implementation-Vendor'   : 'mayo',
-                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-                'Mod-Loader'              : mod_loader,
-                'Minecraft-Version'       : minecraft_version,
-                'Mod-Version'             : mod_version
-        ])
-    }
-    finalizedBy 'reobfJar'
-}
-
-publishing {
-    publications {
-        register('mavenJava', MavenPublication) {
-            artifact jar
-        }
-    }
-    repositories {
-        maven {
-            url "file://${project.projectDir}/repo"
-        }
-    }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-}
-
-idea {
-    module {
-        downloadSources = true
-        downloadJavadoc = true
-    }
+tasks.named('build') {
+    dependsOn tasks.named('buildLoaders')
 }

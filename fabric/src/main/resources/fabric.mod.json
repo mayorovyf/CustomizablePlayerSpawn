@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "Generates a configurable start structure, uses a marker block as the actual spawn point, and can search for that structure inside a selected dimension and a list of allowed biomes.",
+  "authors": [
+    "mayo"
+  ],
+  "license": "${mod_license}",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.mayo.customizableplayerspawn.fabric.CustomizablePlayerSpawnFabric"
+    ]
+  },
+  "mixins": [
+    "customizableplayerspawn.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": "${fabric_loader_version_range}",
+    "fabric-api": "*",
+    "minecraft": "${fabric_minecraft_version_range}",
+    "java": ">=17"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.mayo.customizableplayerspawn.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "customizableplayerspawn.refmap.json",
+  "mixins": [
+    "ExplosionMixin",
+    "forge.FireBlockForgeMixin",
+    "FlowingFluidMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
