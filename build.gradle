@@ -26,6 +26,48 @@ tasks.register('buildNeoForge', GradleBuild) {
     tasks = ['build']
 }
 
+tasks.register('runFabricClient', GradleBuild) {
+    group = 'minecraft'
+    description = 'Runs the Fabric client.'
+    dir = file('fabric')
+    tasks = ['runClient']
+}
+
+tasks.register('runFabricServer', GradleBuild) {
+    group = 'minecraft'
+    description = 'Runs the Fabric server.'
+    dir = file('fabric')
+    tasks = ['runServer']
+}
+
+tasks.register('runForgeClient', GradleBuild) {
+    group = 'minecraft'
+    description = 'Runs the Forge client.'
+    dir = file('forge')
+    tasks = ['runClient']
+}
+
+tasks.register('runForgeServer', GradleBuild) {
+    group = 'minecraft'
+    description = 'Runs the Forge server.'
+    dir = file('forge')
+    tasks = ['runServer']
+}
+
+tasks.register('runNeoForgeClient', GradleBuild) {
+    group = 'minecraft'
+    description = 'Runs the NeoForge client.'
+    dir = file('neoforge')
+    tasks = ['runClient']
+}
+
+tasks.register('runNeoForgeServer', GradleBuild) {
+    group = 'minecraft'
+    description = 'Runs the NeoForge server.'
+    dir = file('neoforge')
+    tasks = ['runServer']
+}
+
 tasks.register('buildLoaders') {
     group = 'build'
     description = 'Builds Forge, Fabric, and NeoForge loader jars.'

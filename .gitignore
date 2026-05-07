@@ -1,6 +1,9 @@
 # Gradle
 .gradle/
 build/
+*/gradle/
+*/gradlew
+*/gradlew.bat
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/**/build/
 
