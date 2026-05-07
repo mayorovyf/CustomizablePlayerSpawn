@@ -2,28 +2,130 @@
 
 ## English
 
-Customizable Player Spawn changes the way players first appear in a world. With this mod, you can choose a custom starting location instead of using the default spawn.
+Customizable Player Spawn is a config-driven spawn control mod for Forge, NeoForge and Fabric.
 
-The mod can place a prepared `.nbt` structure and use a marker inside it as the real spawn point. This is useful for starter houses, islands, lobbies, map introductions, and modpacks where the first moments of the game should happen in a specific place.
+It is made for worlds and modpacks where the first spawn should happen in a prepared place: a starter ruin, house, island, lobby, intro area, or any other `.nbt` structure. The mod can place that structure, find the real spawn point inside it, save the result, and keep using the same assigned spawn later.
 
-It can load structures from your mod resources, datapacks, other mods, world files, or external `.nbt` files in the config folder. If you do not want to place any structure, the mod can simply send players to a chosen dimension and create a start position there.
+### What it can do
 
-Everything is controlled through the config. You can choose the target dimension, limit the search to specific biomes, adjust the search range, change height and spawn offsets, and set the player rotation. After the spawn position is found, the mod saves it and keeps using the same location for future joins and respawns.
+- place structures from mod resources, datapacks, other mods, world files, or loose `.nbt` files in `config/customizableplayerspawn/structures`
+- use a marker block, a vanilla `DATA` structure marker, a relative position, or the structure center as the spawn anchor
+- create one shared spawn for everyone or separate per-player spawn structures
+- choose the target dimension and allowed biomes
+- search by heightmap, by smart surface validation, or by fixed Y level
+- check the structure footprint, dangerous blocks, fluids, tree overlap, and surface height difference
+- clear the placement volume, fill support gaps, refresh lighting, and process markers after placement
+- optionally protect generated spawn structures from blocks, placement, containers, explosions, fire, and fluids
+- reload, validate, list, reset, and teleport to assigned spawns with `/cps`
+- keep old `config/customizableplayerspawn-common.toml` setups working as a legacy fallback
 
-This mod is meant for worlds and modpacks that need a controlled starting experience. If structure placement is enabled, the template must contain a valid marker block or a matching `DATA` marker. If both `structureTemplate` and `externalStructureFile` are empty, the mod switches to spawn mode without a structure.
+### Profiles
 
-Suggestions for future development and bug reports can be submitted in the issue tracker: https://github.com/mayorovyf/CustomizablePlayerSpawn/issues
+The recommended setup is a profile file:
+
+`config/customizableplayerspawn/profiles/<profile>.toml`
+
+Loose structure files go here:
+
+`config/customizableplayerspawn/structures/<structure>.nbt`
+
+Minimal example:
+
+```toml
+schemaVersion = 2
+id = "starter_ruin"
+enabled = true
+priority = 100
+dimension = "minecraft:overworld"
+structure = "config:starter_ruin.nbt"
+
+[anchor]
+mode = "MARKER_BLOCK"
+markerBlock = "customizableplayerspawn:player_spawn_marker"
+removeMarkerBlock = true
+offsetX = 0
+offsetY = 0
+offsetZ = 0
+angle = 0
+fallback = "SAFE_NEARBY"
+
+[placement]
+strategy = "FLAT_FOOTPRINT"
+surfaceSearchMode = "SMART"
+searchRadius = 2048
+searchAttempts = 128
+maxSurfaceStep = 3
+allowFluidsBelow = false
+allowReplaceableAtFeet = true
+allowReplaceableAtHead = true
+forbiddenSurfaceBlocks = ["minecraft:lava", "minecraft:magma_block"]
+```
+
+If `config/customizableplayerspawn/settings.toml` has `selectedProfile`, that profile is used. If it is empty, the enabled valid profile with the highest `priority` is selected.
+
+Issues and suggestions: https://github.com/mayorovyf/CustomizablePlayerSpawn/issues
 
 ## Русский
 
-Customizable Player Spawn меняет то, как игроки впервые появляются в мире. С этим модом можно задать собственную стартовую точку вместо обычного спавна.
+Customizable Player Spawn это конфигурируемый мод для Forge, NeoForge и Fabric, который управляет стартовым спавном игрока.
 
-Мод умеет размещать подготовленную `.nbt` структуру и использовать маркер внутри неё как настоящую точку спавна. Это удобно для стартовых домов, островов, лобби, вступительных зон на картах и сборок, где важно, чтобы первые минуты игры проходили в заранее выбранном месте.
+Он нужен для миров и сборок, где игрок должен появиться не на обычном ванильном спавне, а в подготовленном месте: руине, стартовом доме, острове, лобби, вступительной зоне или любой другой `.nbt` структуре. Мод ставит структуру, находит внутри неё реальную точку спавна, сохраняет результат и дальше использует уже назначенную позицию.
 
-Он может загружать структуры из ресурсов мода, датапаков, других модов, файлов мира или внешних `.nbt` файлов в папке конфига. Если структура не нужна, мод может просто отправить игроков в выбранное измерение и создать стартовую точку там.
+### Что умеет мод
 
-Все настройки задаются через конфиг. Можно выбрать целевое измерение, ограничить поиск нужными биомами, настроить радиус поиска, смещения по высоте и координатам, а также угол поворота игрока. После того как точка спавна найдена, мод сохраняет её и использует ту же позицию при следующих входах и респавнах.
+- размещать структуры из ресурсов мода, датапаков, других модов, файлов мира или loose `.nbt` из `config/customizableplayerspawn/structures`
+- брать точку спавна из блока-маркера, `DATA` marker, относительной позиции или центра структуры
+- создавать одну общую структуру для всех игроков или отдельные структуры для каждого игрока
+- выбирать измерение и список разрешённых биомов
+- искать поверхность через heightmap, умную проверку площадки или фиксированную Y-высоту
+- проверять footprint структуры, опасные блоки, жидкости, деревья и перепад высот
+- очищать область размещения, заполнять пустоты под опорами, обновлять свет и обрабатывать маркеры после размещения
+- включать защиту стартовых структур от ломания, установки блоков, контейнеров, взрывов, огня и жидкостей
+- управлять модом командами `/cps`
+- сохранять совместимость со старым `config/customizableplayerspawn-common.toml`
 
-Этот мод подходит для миров и сборок, где нужен контролируемый старт. Если включено размещение структуры, в шаблоне должен быть корректный блок-маркер или подходящий `DATA` marker. Если `structureTemplate` и `externalStructureFile` пустые, мод автоматически переходит в режим спавна без структуры.
+### Профили
 
-Если у вас есть предложения по развитию мода или вы нашли ошибку, оставьте сообщение в issue tracker: https://github.com/mayorovyf/CustomizablePlayerSpawn/issues
+Основной способ настройки:
+
+`config/customizableplayerspawn/profiles/<profile>.toml`
+
+Loose `.nbt` структуры кладутся сюда:
+
+`config/customizableplayerspawn/structures/<structure>.nbt`
+
+Минимальный пример:
+
+```toml
+schemaVersion = 2
+id = "starter_ruin"
+enabled = true
+priority = 100
+dimension = "minecraft:overworld"
+structure = "config:starter_ruin.nbt"
+
+[anchor]
+mode = "MARKER_BLOCK"
+markerBlock = "customizableplayerspawn:player_spawn_marker"
+removeMarkerBlock = true
+offsetX = 0
+offsetY = 0
+offsetZ = 0
+angle = 0
+fallback = "SAFE_NEARBY"
+
+[placement]
+strategy = "FLAT_FOOTPRINT"
+surfaceSearchMode = "SMART"
+searchRadius = 2048
+searchAttempts = 128
+maxSurfaceStep = 3
+allowFluidsBelow = false
+allowReplaceableAtFeet = true
+allowReplaceableAtHead = true
+forbiddenSurfaceBlocks = ["minecraft:lava", "minecraft:magma_block"]
+```
+
+Если в `config/customizableplayerspawn/settings.toml` указан `selectedProfile`, мод использует его. Если поле пустое, выбирается включённый валидный профиль с самым большим `priority`.
+
+Ошибки и предложения: https://github.com/mayorovyf/CustomizablePlayerSpawn/issues

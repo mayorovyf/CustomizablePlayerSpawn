@@ -5,68 +5,29 @@ plugins {
 version = mod_version
 group = mod_group_id
 
-tasks.register('buildForge', GradleBuild) {
-    group = 'build'
-    description = 'Builds the Forge loader jar.'
-    dir = file('forge')
-    tasks = ['build']
+def gradleWrapper = providers.systemProperty('os.name').get().toLowerCase().contains('windows')
+        ? file('gradlew.bat')
+        : file('gradlew')
+
+def registerLoaderTask = { String taskName, String taskGroup, String taskDescription, String loaderDir, String loaderTask ->
+    tasks.register(taskName, Exec) {
+        group = taskGroup
+        description = taskDescription
+        workingDir = projectDir
+        commandLine gradleWrapper.absolutePath, '-p', file(loaderDir).absolutePath, loaderTask
+    }
 }
 
-tasks.register('buildFabric', GradleBuild) {
-    group = 'build'
-    description = 'Builds the Fabric loader jar.'
-    dir = file('fabric')
-    tasks = ['build']
-}
+registerLoaderTask('buildForge', 'build', 'Builds the Forge loader jar.', 'forge', 'build')
+registerLoaderTask('buildFabric', 'build', 'Builds the Fabric loader jar.', 'fabric', 'build')
+registerLoaderTask('buildNeoForge', 'build', 'Builds the NeoForge loader jar.', 'neoforge', 'build')
 
-tasks.register('buildNeoForge', GradleBuild) {
-    group = 'build'
-    description = 'Builds the NeoForge loader jar.'
-    dir = file('neoforge')
-    tasks = ['build']
-}
-
-tasks.register('runFabricClient', GradleBuild) {
-    group = 'minecraft'
-    description = 'Runs the Fabric client.'
-    dir = file('fabric')
-    tasks = ['runClient']
-}
-
-tasks.register('runFabricServer', GradleBuild) {
-    group = 'minecraft'
-    description = 'Runs the Fabric server.'
-    dir = file('fabric')
-    tasks = ['runServer']
-}
-
-tasks.register('runForgeClient', GradleBuild) {
-    group = 'minecraft'
-    description = 'Runs the Forge client.'
-    dir = file('forge')
-    tasks = ['runClient']
-}
-
-tasks.register('runForgeServer', GradleBuild) {
-    group = 'minecraft'
-    description = 'Runs the Forge server.'
-    dir = file('forge')
-    tasks = ['runServer']
-}
-
-tasks.register('runNeoForgeClient', GradleBuild) {
-    group = 'minecraft'
-    description = 'Runs the NeoForge client.'
-    dir = file('neoforge')
-    tasks = ['runClient']
-}
-
-tasks.register('runNeoForgeServer', GradleBuild) {
-    group = 'minecraft'
-    description = 'Runs the NeoForge server.'
-    dir = file('neoforge')
-    tasks = ['runServer']
-}
+registerLoaderTask('runFabricClient', 'minecraft', 'Runs the Fabric client.', 'fabric', 'runClient')
+registerLoaderTask('runFabricServer', 'minecraft', 'Runs the Fabric server.', 'fabric', 'runServer')
+registerLoaderTask('runForgeClient', 'minecraft', 'Runs the Forge client.', 'forge', 'runClient')
+registerLoaderTask('runForgeServer', 'minecraft', 'Runs the Forge server.', 'forge', 'runServer')
+registerLoaderTask('runNeoForgeClient', 'minecraft', 'Runs the NeoForge client.', 'neoforge', 'runClient')
+registerLoaderTask('runNeoForgeServer', 'minecraft', 'Runs the NeoForge server.', 'neoforge', 'runServer')
 
 tasks.register('buildLoaders') {
     group = 'build'
